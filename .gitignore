@@ -4,3 +4,7 @@ smartmoneyconcepts.egg-info
 .DS_Store
 __pycache__
 .venv
+
+# Bot
+.env
+bot/data/*.db
