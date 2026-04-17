@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import date
+from datetime import date, datetime, time, timezone
+from zoneinfo import ZoneInfo
 
 from nicegui import ui
 
+from bot.config import EnvSettings
 from bot.state import BotState
 
 logger = logging.getLogger(__name__)
@@ -19,35 +21,50 @@ PAIRS = [
 ]
 EMOTIONS = ["Confiant", "Douteux", "FOMO", "Revenge"]
 
-# Simplified checklist used as "raison d'entree"
-RAISON_CHECKLIST = {
-    "A. Contexte macro": [
-        "Pas de news rouge",
-    ],
-    "B. Structure HTF (4H)": [
-        "BOS/CHoCH clair",
-        "Biais actif",
-        "Pas d'inversion H1",
-    ],
-    "C. Zone OB (30M)": [
-        "OB non mitige",
-        "Force >= 50%",
-        "OB < 3 jours",
-        "Confluence liquidity/FVG",
-    ],
-    "D. Confirmation LTF": [
-        "MSS dans OB",
-        "FVG d'impulsion",
-        "IFVG",
-        "Breaker Block",
-    ],
-    "E. Timing + R:R": [
-        "Kill zone active",
-        "Pas fin de session",
-        "R:R >= 1:2",
-        "SL buffer ok",
-    ],
-}
+
+def _friday_cutoff_label() -> str:
+    """Convert 15:00 UTC to the user's configured timezone (DST aware)."""
+    env = EnvSettings()
+    tz = ZoneInfo(env.timezone)
+    cutoff_utc = datetime.combine(datetime.now().date(), time(15, 0), tzinfo=timezone.utc)
+    local = cutoff_utc.astimezone(tz)
+    offset = local.utcoffset()
+    offset_hours = int(offset.total_seconds() // 3600) if offset else 0
+    sign = "+" if offset_hours >= 0 else "-"
+    return f"Pas vendredi apres {local.strftime('%Hh%M')} (UTC{sign}{abs(offset_hours)})"
+
+
+def _build_raison_checklist() -> dict:
+    """Build the raison-d-entree checklist with dynamic Friday cutoff."""
+    return {
+        "A. Contexte macro": [
+            "Pas de news rouge",
+        ],
+        "B. Structure HTF (4H)": [
+            "BOS/CHoCH clair",
+            "Biais actif",
+            "Pas d'inversion H1",
+        ],
+        "C. Zone OB (30M)": [
+            "OB non mitige",
+            "Force >= 50%",
+            "OB < 3 jours",
+            "Confluence liquidity/FVG",
+        ],
+        "D. Confirmation LTF": [
+            "MSS dans OB",
+            "FVG d'impulsion",
+            "IFVG",
+            "Breaker Block",
+        ],
+        "E. Timing + R:R": [
+            "Kill zone active",
+            "Pas fin de session",
+            _friday_cutoff_label(),
+            "R:R >= 1:2",
+            "SL buffer ok",
+        ],
+    }
 
 
 def build_journal_panel(state: BotState) -> None:
@@ -85,7 +102,7 @@ def build_journal_panel(state: BotState) -> None:
         )
         raison_checkboxes: list[tuple[str, ui.checkbox]] = []
         with ui.row().classes("gap-4 flex-wrap w-full"):
-            for section, items in RAISON_CHECKLIST.items():
+            for section, items in _build_raison_checklist().items():
                 with ui.column().classes("min-w-[180px]"):
                     ui.label(section).classes("text-caption text-weight-bold")
                     for label in items:

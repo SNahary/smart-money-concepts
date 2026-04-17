@@ -11,6 +11,7 @@ from bot.state import BotState
 from bot.ui.backtest_panel import build_backtest_panel
 from bot.ui.checklist_panel import build_checklist_panel
 from bot.ui.journal_panel import build_journal_panel
+from bot.ui.killzone_panel import build_killzone_panel
 
 logger = logging.getLogger(__name__)
 
@@ -70,16 +71,94 @@ def start_dashboard() -> None:
 
 def _build_ui() -> None:
     # ------------------------------------------------------------------
-    # Header
+    # Header — refined dark gradient with logo + status pill + action buttons
     # ------------------------------------------------------------------
-    with ui.header().classes("items-center justify-between q-px-md"):
-        ui.label("SMC Signal Bot").classes("text-h5 text-weight-bold")
-        with ui.row().classes("items-center gap-2"):
-            status_label = ui.label("Stopped").classes("text-caption")
-            start_btn = ui.button("Start", on_click=lambda: _start_scanning(status_label, start_btn, stop_btn))
-            start_btn.props("color=positive icon=play_arrow")
-            stop_btn = ui.button("Stop", on_click=lambda: _stop_scanning(status_label, start_btn, stop_btn))
-            stop_btn.props("color=negative icon=stop")
+    ui.add_head_html("""
+    <style>
+    .bot-header {
+        background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #334155 100%) !important;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+        border-bottom: 1px solid rgba(255,255,255,0.08);
+    }
+    .status-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 14px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 0.5px;
+        text-transform: uppercase;
+    }
+    .status-running {
+        background: rgba(34, 197, 94, 0.15);
+        color: #22c55e;
+        border: 1px solid rgba(34, 197, 94, 0.4);
+    }
+    .status-stopped {
+        background: rgba(148, 163, 184, 0.15);
+        color: #94a3b8;
+        border: 1px solid rgba(148, 163, 184, 0.3);
+    }
+    .status-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: currentColor;
+    }
+    .status-running .status-dot {
+        animation: pulse 1.8s ease-in-out infinite;
+        box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.6);
+    }
+    @keyframes pulse {
+        0%, 100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.5); }
+        50% { box-shadow: 0 0 0 8px rgba(34, 197, 94, 0); }
+    }
+    .btn-start {
+        background: linear-gradient(135deg, #10b981, #059669) !important;
+        color: white !important;
+        border-radius: 10px !important;
+        font-weight: 600 !important;
+        letter-spacing: 0.3px;
+        box-shadow: 0 2px 6px rgba(16, 185, 129, 0.35);
+    }
+    .btn-stop {
+        background: linear-gradient(135deg, #ef4444, #dc2626) !important;
+        color: white !important;
+        border-radius: 10px !important;
+        font-weight: 600 !important;
+        letter-spacing: 0.3px;
+        box-shadow: 0 2px 6px rgba(239, 68, 68, 0.35);
+    }
+    .btn-start:disabled, .btn-stop:disabled {
+        opacity: 0.4 !important;
+        box-shadow: none !important;
+    }
+    </style>
+    """)
+
+    with ui.header().classes("bot-header items-center justify-between q-px-lg q-py-sm"):
+        # Left: logo + title
+        with ui.row().classes("items-center gap-3"):
+            ui.icon("candlestick_chart", size="2rem").classes("text-cyan-400")
+            with ui.column().classes("gap-0"):
+                ui.label("SMC Signal Bot").classes("text-h6 text-weight-bold text-white q-mb-none")
+                ui.label("Indicateur ICT / Smart Money Concepts").classes("text-caption text-grey-5")
+
+        # Right: status pill + buttons
+        with ui.row().classes("items-center gap-3"):
+            status_pill = ui.html('<div class="status-pill status-stopped"><span class="status-dot"></span>Stopped</div>')
+            status_label = status_pill  # keep legacy name for other code
+
+            start_btn = ui.button(
+                "Start", icon="play_arrow",
+                on_click=lambda: _start_scanning(status_label, start_btn, stop_btn),
+            ).classes("btn-start q-px-md")
+            stop_btn = ui.button(
+                "Stop", icon="stop",
+                on_click=lambda: _stop_scanning(status_label, start_btn, stop_btn),
+            ).classes("btn-stop q-px-md")
             stop_btn.set_enabled(False)
 
     with ui.splitter(value=25).classes("w-full h-full") as splitter:
@@ -202,6 +281,7 @@ def _build_ui() -> None:
                 backtest_tab = ui.tab("Backtest")
                 checklist_tab = ui.tab("Checklist")
                 journal_tab = ui.tab("Journal")
+                kz_tab = ui.tab("Kill Zones")
 
             with ui.tab_panels(tabs, value=live_tab).classes("w-full"):
                 # --- Live tab ---
@@ -255,10 +335,28 @@ def _build_ui() -> None:
                 with ui.tab_panel(journal_tab):
                     build_journal_panel(_state)
 
+                # --- Kill Zones tab ---
+                with ui.tab_panel(kz_tab):
+                    build_killzone_panel(_strategy)
+
     # ------------------------------------------------------------------
-    # Periodic UI refresh (every 2 seconds when running)
+    # Periodic UI refresh (every 2 seconds)
     # ------------------------------------------------------------------
     async def refresh_ui():
+        # Sync status pill + button state with the actual global scanner state
+        if _scanner and _scanner.running:
+            status_label.set_content(
+                '<div class="status-pill status-running"><span class="status-dot"></span>Running</div>'
+            )
+            start_btn.set_enabled(False)
+            stop_btn.set_enabled(True)
+        else:
+            status_label.set_content(
+                '<div class="status-pill status-stopped"><span class="status-dot"></span>Stopped</div>'
+            )
+            start_btn.set_enabled(True)
+            stop_btn.set_enabled(False)
+
         if _scanner is None:
             return
 
@@ -377,8 +475,9 @@ def _start_scanning(status_label, start_btn, stop_btn) -> None:
         return
 
     # The persistent loop (started on server boot) will pick up _scanner.running
-    status_label.set_text("Running")
-    status_label.classes(replace="text-caption text-positive")
+    status_label.set_content(
+        '<div class="status-pill status-running"><span class="status-dot"></span>Running</div>'
+    )
     start_btn.set_enabled(False)
     stop_btn.set_enabled(True)
     ui.notify("Scanner started", type="positive")
@@ -391,8 +490,9 @@ def _stop_scanning(status_label, start_btn, stop_btn) -> None:
         _scanner.stop()
         _scanner = None
 
-    status_label.set_text("Stopped")
-    status_label.classes(replace="text-caption text-grey")
+    status_label.set_content(
+        '<div class="status-pill status-stopped"><span class="status-dot"></span>Stopped</div>'
+    )
     start_btn.set_enabled(True)
     stop_btn.set_enabled(False)
     ui.notify("Scanner stopped", type="warning")

@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import datetime, time, timezone
+from zoneinfo import ZoneInfo
 
 from nicegui import ui
 
+from bot.config import EnvSettings
 from bot.state import BotState
 
 logger = logging.getLogger(__name__)
@@ -35,6 +38,18 @@ TV_SYMBOLS = {
 def _tv_url(pair: str) -> str:
     symbol = TV_SYMBOLS.get(pair, f"FX:{pair}")
     return f"https://www.tradingview.com/chart/?symbol={symbol}"
+
+
+def _friday_cutoff_label() -> str:
+    """Convert 15:00 UTC to the user's configured timezone (DST aware)."""
+    env = EnvSettings()
+    tz = ZoneInfo(env.timezone)
+    cutoff_utc = datetime.combine(datetime.now().date(), time(15, 0), tzinfo=timezone.utc)
+    local = cutoff_utc.astimezone(tz)
+    offset = local.utcoffset()
+    offset_hours = int(offset.total_seconds() // 3600) if offset else 0
+    sign = "+" if offset_hours >= 0 else "-"
+    return f"Pas vendredi apres {local.strftime('%Hh%M')} (UTC{sign}{abs(offset_hours)})"
 
 
 # Structure: { section_key: { "title": str, "items": [ {"key": str, "label": str, "critical": bool } ] } }
@@ -76,7 +91,7 @@ SECTIONS = {
         "items": [
             {"key": "E1", "label": "Kill zone active", "critical": True},
             {"key": "E2", "label": "Pas en fin de session", "critical": True},
-            {"key": "E3", "label": "Pas vendredi apres 15h UTC", "critical": True},
+            {"key": "E3", "label": "Pas vendredi apres 15h UTC", "critical": True, "friday_cutoff": True},
             {"key": "E4", "label": "R:R >= 1:2 sur TP1", "critical": True},
             {"key": "E5", "label": "SL au-dela de l'OB + buffer", "critical": True},
         ],
@@ -101,8 +116,6 @@ def build_checklist_panel(state: BotState) -> None:
         tv_btn.props("color=info icon=open_in_new outline")
         reset_btn = ui.button("Reset", on_click=lambda: _reset())
         reset_btn.props("color=warning icon=refresh")
-        save_btn = ui.button("Sauvegarder", on_click=lambda: _save())
-        save_btn.props("color=primary icon=save")
 
     # === Store checkbox references ===
     checkboxes: dict[str, ui.checkbox] = {}
@@ -111,11 +124,18 @@ def build_checklist_panel(state: BotState) -> None:
     # === Build sections ===
     for key, section in SECTIONS.items():
         total = len(section["items"])
-        with ui.expansion(f"{section['title']}  (0/{total})", icon="check_box_outline_blank").classes("w-full q-mb-sm") as exp:
+        with ui.expansion(
+            f"{section['title']}  (0/{total})",
+            icon="check_box_outline_blank",
+            value=True,  # expanded by default
+        ).classes("w-full q-mb-sm") as exp:
             section_counters[key] = exp
 
             for item in section["items"]:
                 label = item["label"]
+                # Dynamic Friday cutoff: compute from configured timezone (DST aware)
+                if item.get("friday_cutoff"):
+                    label = _friday_cutoff_label()
                 if not item["critical"]:
                     label = f"{label}  (bonus)"
                 # Default: all checked, user unchecks missing criteria
@@ -211,48 +231,6 @@ def build_checklist_panel(state: BotState) -> None:
             cb.set_value(True)
         _update_verdict()
         ui.notify("Checklist reinitialisee (tout coche)", type="info")
-
-    async def _save():
-        # Gather items cochees
-        items_cochees = [k for k, cb in checkboxes.items() if cb.value]
-        score = len(items_cochees)
-        mss_ok = checkboxes["D1"].value
-        fvg_ok = checkboxes["D2"].value
-        ifvg_ok = checkboxes["D3"].value
-        breaker_ok = checkboxes["D4"].value
-        entry_point_ok = fvg_ok or ifvg_ok or breaker_ok
-        entry_confluence = sum([fvg_ok, ifvg_ok, breaker_ok])
-
-        if score == TOTAL_ITEMS:
-            verdict, setup = "GO", "A+++"
-        elif not mss_ok:
-            verdict, setup = "NO-GO", "Skip (MSS manquant)"
-        elif not entry_point_ok:
-            verdict, setup = "NO-GO", "Skip (aucun point d'entree)"
-        elif score >= 14:
-            verdict = "GO"
-            if entry_confluence >= 3:
-                setup = "A+ premium"
-            elif entry_confluence == 2:
-                setup = "A+"
-            else:
-                if fvg_ok:
-                    setup = "Standard (FVG)"
-                elif ifvg_ok:
-                    setup = "Standard (IFVG)"
-                else:
-                    setup = "Standard (Breaker)"
-        else:
-            verdict, setup = "INCOMPLET", "Skip"
-
-        entry_id = await state.save_checklist({
-            "pair": pair_sel.value,
-            "verdict": verdict,
-            "setup_level": setup,
-            "score": score,
-            "items_cochees": items_cochees,
-        })
-        ui.notify(f"Checklist #{entry_id} sauvegardee — {verdict} ({setup})", type="positive")
 
     # Initial verdict calculation
     _update_verdict()
