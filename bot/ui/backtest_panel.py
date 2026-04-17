@@ -174,7 +174,7 @@ def _render_results(
             _stat_card("OBs detectes", str(result.diag_total_obs_found), "grey")
             _stat_card("En confluence", str(result.diag_obs_in_confluence), "grey")
             _stat_card("Retour prix", str(result.diag_price_returns), "grey")
-            _stat_card("Filtres R:R", str(result.diag_filtered_by_rr), "warning")
+            _stat_card("Hors Kill Zone", str(result.diag_filtered_by_kz), "warning")
             _stat_card("Signaux", str(result.total_signals), "primary")
 
         if result.total_signals == 0:

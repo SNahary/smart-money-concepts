@@ -69,7 +69,7 @@ def build_journal_panel(state: BotState) -> None:
             placeholder="Commentaires libres...",
         ).classes("w-full q-mt-sm")
 
-        save_btn = ui.button("Enregistrer", on_click=lambda: asyncio.ensure_future(_save()))
+        save_btn = ui.button("Enregistrer", on_click=lambda: _save())
         save_btn.props("color=primary icon=save")
 
     # === History table ===

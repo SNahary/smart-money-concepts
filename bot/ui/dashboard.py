@@ -9,6 +9,7 @@ from bot.config import EnvSettings, StrategyConfig
 from bot.scanner import Scanner
 from bot.state import BotState
 from bot.ui.backtest_panel import build_backtest_panel
+from bot.ui.checklist_panel import build_checklist_panel
 from bot.ui.journal_panel import build_journal_panel
 
 logger = logging.getLogger(__name__)
@@ -161,16 +162,6 @@ def _build_ui() -> None:
                 ui.separator()
                 ui.label("Filtres").classes("text-caption text-grey")
 
-                ui.label("R:R minimum").classes("text-caption text-grey q-mt-sm")
-                ui.number(
-                    value=_strategy.min_rr,
-                    min=0.5,
-                    max=10.0,
-                    step=0.5,
-                    format="%.1f",
-                    on_change=lambda e: _update_strategy("min_rr", float(e.value)),
-                ).classes("w-full")
-
                 ui.label("Buffer SL (pips)").classes("text-caption text-grey q-mt-sm")
                 ui.number(
                     value=_strategy.sl_buffer_pips,
@@ -209,6 +200,7 @@ def _build_ui() -> None:
             with ui.tabs().classes("w-full") as tabs:
                 live_tab = ui.tab("Live Monitoring")
                 backtest_tab = ui.tab("Backtest")
+                checklist_tab = ui.tab("Checklist")
                 journal_tab = ui.tab("Journal")
 
             with ui.tab_panels(tabs, value=live_tab).classes("w-full"):
@@ -254,6 +246,10 @@ def _build_ui() -> None:
                 # --- Backtest tab ---
                 with ui.tab_panel(backtest_tab):
                     build_backtest_panel(_env, _strategy, _state)
+
+                # --- Checklist tab ---
+                with ui.tab_panel(checklist_tab):
+                    build_checklist_panel(_state)
 
                 # --- Journal tab ---
                 with ui.tab_panel(journal_tab):

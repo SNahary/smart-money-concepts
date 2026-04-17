@@ -32,6 +32,12 @@ def _get_timeframe_map() -> dict:
 
 
 class MT5Provider(DataProvider):
+    # MT5 broker servers typically run on Europe/Helsinki time (EET/EEST,
+    # UTC+2 winter / UTC+3 summer). MT5's copy_rates_* APIs return these
+    # timestamps labelled as Unix epoch seconds, but they are actually in
+    # the broker's local time — they are NOT true UTC.
+    BROKER_TZ = ZoneInfo("Europe/Helsinki")
+
     def __init__(
         self,
         login: int,
@@ -124,10 +130,16 @@ class MT5Provider(DataProvider):
 
     # ------------------------------------------------------------------
     def _to_dataframe(self, rates) -> pd.DataFrame:
-        """Convert MT5 rates array to a standardised DataFrame."""
+        """Convert MT5 rates array to a standardised DataFrame.
+
+        MT5 timestamps are broker server time (Europe/Helsinki) disguised
+        as Unix epoch. We first label them as broker TZ, then convert to
+        the user's display TZ so the final time is correct.
+        """
         df = pd.DataFrame(rates)
-        df["time"] = pd.to_datetime(df["time"], unit="s", utc=True)
-        df["time"] = df["time"].dt.tz_convert(self.tz)
+        # Parse as naive datetime (no timezone), then localise as broker TZ
+        df["time"] = pd.to_datetime(df["time"], unit="s")
+        df["time"] = df["time"].dt.tz_localize(self.BROKER_TZ).dt.tz_convert(self.tz)
         df = df.rename(columns={"tick_volume": "volume"})
         df = df.set_index("time")
         return df[["open", "high", "low", "close", "volume"]]
@@ -177,11 +189,14 @@ class MT5Provider(DataProvider):
 
         real_symbol = self._resolve_symbol(symbol)
 
-        # Ensure naive datetimes are treated as UTC
+        # Ensure naive datetimes are treated as UTC, then convert to broker TZ
+        # so MT5's copy_rates_range gets the right window.
         if isinstance(from_dt, datetime) and from_dt.tzinfo is None:
             from_dt = from_dt.replace(tzinfo=timezone.utc)
         if isinstance(to_dt, datetime) and to_dt.tzinfo is None:
             to_dt = to_dt.replace(tzinfo=timezone.utc)
+        from_dt = from_dt.astimezone(self.BROKER_TZ).replace(tzinfo=None)
+        to_dt = to_dt.astimezone(self.BROKER_TZ).replace(tzinfo=None)
 
         rates = mt5.copy_rates_range(real_symbol, mt5_tf, from_dt, to_dt)
         if rates is None or len(rates) == 0:

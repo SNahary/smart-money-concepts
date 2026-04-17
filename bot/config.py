@@ -51,7 +51,6 @@ class StrategyConfig(BaseModel):
     bias_swing_length: int = 10
     ob_swing_length: int = 10
     scan_interval: int = 300  # seconds (5 minutes)
-    min_rr: float = 2.0
     sl_buffer_pips: float = 5.0
     killzones: List[str] = [
         "London open kill zone",

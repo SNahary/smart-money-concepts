@@ -101,6 +101,16 @@ class BotState:
                 created_at    TEXT    NOT NULL DEFAULT (datetime('now'))
             );
 
+            CREATE TABLE IF NOT EXISTS checklist_log (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                pair            TEXT,
+                verdict         TEXT,
+                setup_level     TEXT,
+                score           INTEGER,
+                items_cochees   TEXT,
+                created_at      TEXT DEFAULT (datetime('now'))
+            );
+
             CREATE TABLE IF NOT EXISTS trading_journal (
                 id              INTEGER PRIMARY KEY AUTOINCREMENT,
                 pair            TEXT    NOT NULL,
@@ -344,6 +354,34 @@ class BotState:
             "DELETE FROM trading_journal WHERE id=?", (entry_id,)
         )
         await self._db.commit()
+
+    # ------------------------------------------------------------------
+    # Checklist log
+    # ------------------------------------------------------------------
+    async def save_checklist(self, data: dict) -> int:
+        cur = await self._db.execute(
+            """INSERT INTO checklist_log
+               (pair, verdict, setup_level, score, items_cochees)
+               VALUES (?, ?, ?, ?, ?)""",
+            (
+                data.get("pair"),
+                data.get("verdict"),
+                data.get("setup_level"),
+                data.get("score"),
+                json.dumps(data.get("items_cochees", [])),
+            ),
+        )
+        await self._db.commit()
+        return cur.lastrowid
+
+    async def get_checklists(self, limit: int = 50) -> list[dict]:
+        async with self._db.execute(
+            "SELECT * FROM checklist_log ORDER BY created_at DESC LIMIT ?",
+            (limit,),
+        ) as cur:
+            rows = await cur.fetchall()
+            cols = [d[0] for d in cur.description]
+            return [dict(zip(cols, row)) for row in rows]
 
     # ------------------------------------------------------------------
     async def close(self) -> None:

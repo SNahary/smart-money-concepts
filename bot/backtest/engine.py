@@ -97,7 +97,7 @@ class BacktestEngine:
         result.diag_total_obs_found = total_diag[0]
         result.diag_obs_in_confluence = total_diag[1]
         result.diag_price_returns = total_diag[2]
-        result.diag_filtered_by_rr = total_diag[3]
+        result.diag_filtered_by_kz = total_diag[3]
         result.compute_stats()
         return result
 
@@ -148,9 +148,7 @@ class BacktestEngine:
         diag_obs_found = 0
         diag_obs_confluence = 0
         diag_price_returns = 0
-        diag_filtered_rr = 0
         diag_filtered_kz = 0
-        diag_rr_values: list[float] = []
 
         for i, (ts, candle) in enumerate(ob_in_range.iterrows()):
             # Progress
@@ -280,14 +278,12 @@ class BacktestEngine:
                     sl_buffer_pips=self.strategy.sl_buffer_pips,
                 )
 
-                # All signals are recorded (no R:R filter for backtest stats).
-                # Telegram alert only for R:R >= min_rr.
+                # All signals are recorded. Telegram alert always sent
+                # (bot indicateur — the trader filters via the checklist).
                 trade["signal_time"] = ts  # candle timestamp that touched the OB
                 trade["ob_time"] = ob.get("ob_time")  # OB formation time
-                best_rr = max(trade.get("rr1") or 0, trade.get("rr2") or 0)
-                diag_rr_values.append(best_rr)
 
-                if self.notifier and best_rr >= self.strategy.min_rr:
+                if self.notifier:
                     self.notifier.send_signal(trade, current_bias)
 
                 sig = BacktestSignal(
@@ -315,16 +311,10 @@ class BacktestEngine:
 
         wins = sum(1 for s in signals if s.outcome == "WIN_TP1")
         losses = sum(1 for s in signals if s.outcome == "LOSS")
-        # R:R distribution of filtered OBs
-        rr_lt1 = sum(1 for r in diag_rr_values if r < 1.0)
-        rr_1_15 = sum(1 for r in diag_rr_values if 1.0 <= r < 1.5)
-        rr_15_2 = sum(1 for r in diag_rr_values if 1.5 <= r < 2.0)
         logger.info(
             "Backtest %s done — %d signals (%d WIN, %d LOSS) | "
-            "Diag: %d OBs, %d confluence, %d returns, %d hors KZ | "
-            "RR distrib: <1.0=%d, 1.0-1.5=%d, 1.5-2.0=%d",
+            "Diag: %d OBs, %d confluence, %d returns, %d hors KZ",
             pair, len(signals), wins, losses,
             diag_obs_found, diag_obs_confluence, diag_price_returns, diag_filtered_kz,
-            rr_lt1, rr_1_15, rr_15_2,
         )
         return signals, diag_obs_found, diag_obs_confluence, diag_price_returns, diag_filtered_kz
