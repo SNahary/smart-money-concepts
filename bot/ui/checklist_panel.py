@@ -17,19 +17,25 @@ PAIRS = [
     "AUDUSD", "USDCAD", "USDCHF", "NZDUSD",
 ]
 
-# Correlation rule shown per pair (A3 item of the checklist)
-CORRELATIONS = {
-    "EURUSD": "EURUSD et GBPUSD dans le meme sens (coherence EUR/GBP)",
-    "GBPUSD": "GBPUSD et EURUSD dans le meme sens (coherence EUR/GBP)",
-    "XAUUSD": "DXY baissier (or = inverse du dollar) + risk sentiment coherent",
-    "USDJPY": "DXY haussier + sentiment risk-on (JPY = refuge)",
-    "EURJPY": "EURUSD haussier + risk-on (JPY = refuge)",
-    "GBPJPY": "GBPUSD haussier + risk-on (JPY = refuge)",
-    "AUDUSD": "Risk-on confirme (AUD = pro-risk, sensible a la Chine)",
-    "NZDUSD": "Risk-on confirme (NZD = pro-risk, correle a AUD)",
-    "USDCAD": "Petrole baissier (CAD = petro-devise, correlation inverse)",
-    "USDCHF": "Risk-off OU DXY haussier (CHF = refuge)",
+# TradingView symbol format per pair (FX for forex, OANDA for gold)
+TV_SYMBOLS = {
+    "EURUSD": "FX:EURUSD",
+    "GBPUSD": "FX:GBPUSD",
+    "USDJPY": "FX:USDJPY",
+    "GBPJPY": "FX:GBPJPY",
+    "EURJPY": "FX:EURJPY",
+    "AUDUSD": "FX:AUDUSD",
+    "USDCAD": "FX:USDCAD",
+    "USDCHF": "FX:USDCHF",
+    "NZDUSD": "FX:NZDUSD",
+    "XAUUSD": "OANDA:XAUUSD",
 }
+
+
+def _tv_url(pair: str) -> str:
+    symbol = TV_SYMBOLS.get(pair, f"FX:{pair}")
+    return f"https://www.tradingview.com/chart/?symbol={symbol}"
+
 
 # Structure: { section_key: { "title": str, "items": [ {"key": str, "label": str, "critical": bool } ] } }
 SECTIONS = {
@@ -37,8 +43,6 @@ SECTIONS = {
         "title": "A. Contexte macro",
         "items": [
             {"key": "A1", "label": "Pas de news rouge dans les 2h", "critical": True},
-            {"key": "A2", "label": "DXY compatible avec le trade", "critical": True},
-            {"key": "A3", "label": "Correlations coherentes (voir paire)", "critical": True, "dynamic_correlation": True},
         ],
     },
     "B": {
@@ -87,12 +91,14 @@ def build_checklist_panel(state: BotState) -> None:
 
     ui.label("Checklist d'Entree SMC").classes("text-h5 q-mb-md")
 
-    # === Header: pair + reset + save ===
+    # === Header: pair + TradingView link + reset + save ===
     with ui.row().classes("items-end gap-4 q-mb-md"):
-        pair_sel = ui.select(
-            options=PAIRS, value="EURUSD", label="Paire",
-            on_change=lambda: _update_correlation_label(),
-        ).classes("w-40")
+        pair_sel = ui.select(options=PAIRS, value="EURUSD", label="Paire").classes("w-40")
+        tv_btn = ui.button(
+            "Ouvrir sur TradingView",
+            on_click=lambda: ui.navigate.to(_tv_url(pair_sel.value), new_tab=True),
+        )
+        tv_btn.props("color=info icon=open_in_new outline")
         reset_btn = ui.button("Reset", on_click=lambda: _reset())
         reset_btn.props("color=warning icon=refresh")
         save_btn = ui.button("Sauvegarder", on_click=lambda: _save())
@@ -112,10 +118,8 @@ def build_checklist_panel(state: BotState) -> None:
                 label = item["label"]
                 if not item["critical"]:
                     label = f"{label}  (bonus)"
-                # Dynamic correlation label — depends on selected pair
-                if item.get("dynamic_correlation"):
-                    label = f"Correlations : {CORRELATIONS.get(pair_sel.value, '—')}"
-                cb = ui.checkbox(label, on_change=lambda: _update_verdict()).classes("q-ml-md")
+                # Default: all checked, user unchecks missing criteria
+                cb = ui.checkbox(label, value=True, on_change=lambda: _update_verdict()).classes("q-ml-md")
                 checkboxes[item["key"]] = cb
 
     ui.separator().classes("q-my-md")
@@ -125,12 +129,6 @@ def build_checklist_panel(state: BotState) -> None:
         verdict_label = ui.label("INCOMPLET").classes("text-h4 text-weight-bold")
         score_label = ui.label(f"0 / {TOTAL_ITEMS}").classes("text-h6 text-grey")
         setup_label = ui.label("Cochez les criteres...").classes("text-subtitle1")
-
-    # ------------------------------------------------------------------
-    def _update_correlation_label():
-        """Update the A3 checkbox label when the pair changes."""
-        rule = CORRELATIONS.get(pair_sel.value, "—")
-        checkboxes["A3"].text = f"Correlations : {rule}"
 
     # ------------------------------------------------------------------
     def _update_verdict():
@@ -208,10 +206,11 @@ def build_checklist_panel(state: BotState) -> None:
         setup_label.text = setup
 
     def _reset():
+        # Reset: re-check all (default state)
         for cb in checkboxes.values():
-            cb.set_value(False)
+            cb.set_value(True)
         _update_verdict()
-        ui.notify("Checklist reinitialisee", type="info")
+        ui.notify("Checklist reinitialisee (tout coche)", type="info")
 
     async def _save():
         # Gather items cochees

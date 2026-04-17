@@ -19,6 +19,36 @@ PAIRS = [
 ]
 EMOTIONS = ["Confiant", "Douteux", "FOMO", "Revenge"]
 
+# Simplified checklist used as "raison d'entree"
+RAISON_CHECKLIST = {
+    "A. Contexte macro": [
+        "Pas de news rouge",
+    ],
+    "B. Structure HTF (4H)": [
+        "BOS/CHoCH clair",
+        "Biais actif",
+        "Pas d'inversion H1",
+    ],
+    "C. Zone OB (30M)": [
+        "OB non mitige",
+        "Force >= 50%",
+        "OB < 3 jours",
+        "Confluence liquidity/FVG",
+    ],
+    "D. Confirmation LTF": [
+        "MSS dans OB",
+        "FVG d'impulsion",
+        "IFVG",
+        "Breaker Block",
+    ],
+    "E. Timing + R:R": [
+        "Kill zone active",
+        "Pas fin de session",
+        "R:R >= 1:2",
+        "SL buffer ok",
+    ],
+}
+
 
 def build_journal_panel(state: BotState) -> None:
     """Build the Journal tab contents."""
@@ -49,10 +79,19 @@ def build_journal_panel(state: BotState) -> None:
 
         ui.separator().classes("q-my-sm")
 
-        raison_input = ui.textarea(
-            label="Raison d'entree",
-            placeholder="Ex: Retour sur OB bullish en confluence avec biais haussier 4H, London KZ...",
-        ).classes("w-full")
+        # Raison d'entree = checklist simplifiee (cochable)
+        ui.label("Raison d'entree (cocher les criteres valides)").classes(
+            "text-caption text-grey"
+        )
+        raison_checkboxes: list[tuple[str, ui.checkbox]] = []
+        with ui.row().classes("gap-4 flex-wrap w-full"):
+            for section, items in RAISON_CHECKLIST.items():
+                with ui.column().classes("min-w-[180px]"):
+                    ui.label(section).classes("text-caption text-weight-bold")
+                    for label in items:
+                        # Default: all checked, user unchecks missing criteria
+                        cb = ui.checkbox(label, value=True)
+                        raison_checkboxes.append((f"{section[:1]}: {label}", cb))
 
         with ui.row().classes("gap-4 items-end q-mt-sm"):
             emotions_sel = ui.select(
@@ -82,6 +121,13 @@ def build_journal_panel(state: BotState) -> None:
             ui.notify("Le prix d'entree est requis", type="warning")
             return
 
+        # Serialise checklist as "X/Y criteres : item1 ; item2 ; ..."
+        coches = [label for label, cb in raison_checkboxes if cb.value]
+        total = len(raison_checkboxes)
+        raison_text = (
+            f"{len(coches)}/{total} : " + " ; ".join(coches) if coches else ""
+        )
+
         entry = {
             "pair": pair_sel.value,
             "direction": dir_sel.value,
@@ -91,7 +137,7 @@ def build_journal_panel(state: BotState) -> None:
             "tp": float(tp_input.value) if tp_input.value else None,
             "lot_size": float(lot_input.value) if lot_input.value else None,
             "rr": float(rr_input.value) if rr_input.value else None,
-            "raison_entree": raison_input.value or "",
+            "raison_entree": raison_text,
             "emotions": emotions_sel.value,
             "erreurs": erreurs_input.value or "",
             "notes": notes_input.value or "",
@@ -105,7 +151,8 @@ def build_journal_panel(state: BotState) -> None:
         sl_input.set_value(None)
         tp_input.set_value(None)
         rr_input.set_value(None)
-        raison_input.set_value("")
+        for _, cb in raison_checkboxes:
+            cb.set_value(True)  # default: all checked
         erreurs_input.set_value("")
         notes_input.set_value("")
 
@@ -128,8 +175,14 @@ def build_journal_panel(state: BotState) -> None:
                 {"name": "tp", "label": "TP", "field": "tp"},
                 {"name": "rr", "label": "R:R", "field": "rr"},
                 {"name": "emotions", "label": "Emotions", "field": "emotions"},
-                {"name": "raison", "label": "Raison", "field": "raison"},
-                {"name": "notes", "label": "Notes", "field": "notes"},
+                {"name": "raison", "label": "Raison", "field": "raison",
+                 "align": "left",
+                 "style": "white-space: normal; word-break: break-word; max-width: 400px;",
+                 "headerStyle": "max-width: 400px;"},
+                {"name": "notes", "label": "Notes", "field": "notes",
+                 "align": "left",
+                 "style": "white-space: normal; word-break: break-word; max-width: 300px;",
+                 "headerStyle": "max-width: 300px;"},
             ]
 
             rows = []
@@ -144,13 +197,13 @@ def build_journal_panel(state: BotState) -> None:
                     "tp": e.get("tp") or "-",
                     "rr": f"1:{e['rr']:.1f}" if e.get("rr") else "-",
                     "emotions": e.get("emotions") or "",
-                    "raison": (e.get("raison_entree") or "")[:50],
-                    "notes": (e.get("notes") or "")[:50],
+                    "raison": e.get("raison_entree") or "",
+                    "notes": e.get("notes") or "",
                 })
 
             ui.table(
                 columns=columns, rows=rows, row_key="id"
-            ).classes("w-full").props("dense flat bordered")
+            ).classes("w-full").props("dense flat bordered wrap-cells")
 
     # Load history on panel build (after functions are defined)
     asyncio.ensure_future(_refresh_history())

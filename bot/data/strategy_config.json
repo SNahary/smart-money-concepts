@@ -6,8 +6,8 @@
   "ob_timeframe": "30M",
   "bias_swing_length": 10,
   "ob_swing_length": 10,
-  "scan_interval": 300,
-  "sl_buffer_pips": 5.0,
+  "scan_interval": 100,
+  "sl_buffer_pips": 6.0,
   "killzones": [
     "London open kill zone",
     "New York kill zone",
