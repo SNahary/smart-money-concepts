@@ -64,6 +64,7 @@ SECTIONS = {
             {"key": "D1", "label": "MSS dans la zone OB (OBLIGATOIRE)", "critical": True},
             {"key": "D2", "label": "FVG dans l'impulsion du MSS (point d'entree principal)", "critical": False, "entry_point": True},
             {"key": "D3", "label": "IFVG = ancien FVG oppose invalide (confluence bonus)", "critical": False, "entry_point": True},
+            {"key": "D4", "label": "Breaker Block = OB oppose casse qui devient support/resistance (entree premium)", "critical": False, "entry_point": True},
         ],
     },
     "E": {
@@ -153,17 +154,19 @@ def build_checklist_panel(state: BotState) -> None:
             total = len(section["items"])
             section_counters[sec_key].text = f"{section['title']}  ({c}/{total})"
 
-        # Check MSS + entry point (FVG d'impulsion ou IFVG)
+        # Check MSS + entry point (FVG, IFVG ou Breaker Block)
         mss_ok = checkboxes["D1"].value
-        fvg_ok = checkboxes["D2"].value   # FVG dans l'impulsion du MSS
-        ifvg_ok = checkboxes["D3"].value  # IFVG (ancien FVG oppose invalide)
-        entry_point_ok = fvg_ok or ifvg_ok
+        fvg_ok = checkboxes["D2"].value      # FVG dans l'impulsion du MSS
+        ifvg_ok = checkboxes["D3"].value     # IFVG (ancien FVG oppose invalide)
+        breaker_ok = checkboxes["D4"].value  # Breaker Block
+        entry_point_ok = fvg_ok or ifvg_ok or breaker_ok
+        entry_confluence = sum([fvg_ok, ifvg_ok, breaker_ok])
 
         # Determine verdict
         if score == TOTAL_ITEMS:
             verdict = "GO"
             color = "positive"
-            setup = "Setup A+ — MSS + FVG impulsion + IFVG"
+            setup = "Setup A+++ — MSS + FVG + IFVG + Breaker"
         elif not mss_ok:
             verdict = "NO-GO"
             color = "negative"
@@ -171,7 +174,7 @@ def build_checklist_panel(state: BotState) -> None:
         elif not entry_point_ok:
             verdict = "NO-GO"
             color = "negative"
-            setup = "Entree impossible — FVG d'impulsion ou IFVG obligatoire"
+            setup = "Entree impossible — FVG, IFVG ou Breaker obligatoire"
         elif critical_missing:
             verdict = "NO-GO"
             color = "negative"
@@ -179,12 +182,21 @@ def build_checklist_panel(state: BotState) -> None:
         elif score >= 14:
             verdict = "GO"
             color = "positive"
-            if fvg_ok and ifvg_ok:
-                setup = "Setup A+ — FVG impulsion + IFVG confluence"
-            elif fvg_ok:
-                setup = "Setup Standard — entree sur FVG d'impulsion"
+            if entry_confluence >= 3:
+                setup = "Setup A+ premium — triple confluence"
+            elif entry_confluence == 2:
+                parts = []
+                if fvg_ok: parts.append("FVG")
+                if ifvg_ok: parts.append("IFVG")
+                if breaker_ok: parts.append("Breaker")
+                setup = f"Setup A+ — {' + '.join(parts)}"
             else:
-                setup = "Setup Standard — entree sur IFVG"
+                if fvg_ok:
+                    setup = "Setup Standard — entree sur FVG d'impulsion"
+                elif ifvg_ok:
+                    setup = "Setup Standard — entree sur IFVG"
+                else:
+                    setup = "Setup Standard — entree sur Breaker Block"
         else:
             verdict = "INCOMPLET"
             color = "warning"
@@ -208,22 +220,29 @@ def build_checklist_panel(state: BotState) -> None:
         mss_ok = checkboxes["D1"].value
         fvg_ok = checkboxes["D2"].value
         ifvg_ok = checkboxes["D3"].value
-        entry_point_ok = fvg_ok or ifvg_ok
+        breaker_ok = checkboxes["D4"].value
+        entry_point_ok = fvg_ok or ifvg_ok or breaker_ok
+        entry_confluence = sum([fvg_ok, ifvg_ok, breaker_ok])
 
         if score == TOTAL_ITEMS:
-            verdict, setup = "GO", "A+"
+            verdict, setup = "GO", "A+++"
         elif not mss_ok:
             verdict, setup = "NO-GO", "Skip (MSS manquant)"
         elif not entry_point_ok:
-            verdict, setup = "NO-GO", "Skip (FVG/IFVG manquant)"
+            verdict, setup = "NO-GO", "Skip (aucun point d'entree)"
         elif score >= 14:
             verdict = "GO"
-            if fvg_ok and ifvg_ok:
+            if entry_confluence >= 3:
+                setup = "A+ premium"
+            elif entry_confluence == 2:
                 setup = "A+"
-            elif fvg_ok:
-                setup = "Standard (FVG impulsion)"
             else:
-                setup = "Standard (IFVG)"
+                if fvg_ok:
+                    setup = "Standard (FVG)"
+                elif ifvg_ok:
+                    setup = "Standard (IFVG)"
+                else:
+                    setup = "Standard (Breaker)"
         else:
             verdict, setup = "INCOMPLET", "Skip"
 

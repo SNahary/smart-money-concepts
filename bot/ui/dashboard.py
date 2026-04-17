@@ -57,7 +57,7 @@ def start_dashboard() -> None:
 
     ui.run(
         port=8080,
-        title="SMC Signal Bot",
+        title="ICT / SMC Signal Bot",
         favicon="📊",
         dark=True,
         reload=False,

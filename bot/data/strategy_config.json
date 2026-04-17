@@ -1,0 +1,16 @@
+{
+  "pairs": [
+    "XAUUSD"
+  ],
+  "bias_timeframe": "4H",
+  "ob_timeframe": "30M",
+  "bias_swing_length": 10,
+  "ob_swing_length": 10,
+  "scan_interval": 300,
+  "sl_buffer_pips": 5.0,
+  "killzones": [
+    "London open kill zone",
+    "New York kill zone",
+    "London close kill zone"
+  ]
+}
